@@ -1,8 +1,11 @@
-from flask import Flask, render_template_string, request, redirect, url_for
+# conto_economico_app.py
+from flask import Flask, render_template_string, request, send_file, redirect, url_for
+import io
+import pandas as pd
 
 app = Flask(__name__)
 
-# funzione per gestire i numeri con virgola o punto
+# -------------------- utility numeri --------------------
 def parse_num(value, default=0.0):
     if value is None:
         return default
@@ -12,6 +15,7 @@ def parse_num(value, default=0.0):
     except:
         return default
 
+# -------------------- template HTML --------------------
 HTML = """
 <!doctype html>
 <html lang="it">
@@ -43,7 +47,7 @@ HTML = """
   .row input, .row select{flex:1;padding:10px;border-radius:10px;border:1px solid var(--ring);background:#0b1023;color:var(--txt)}
 
   .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
-  .btn{padding:8px 14px;border:none;border-radius:10px;cursor:pointer;font-weight:700}
+  .btn{padding:8px 14px;border:none;border-radius:10px;cursor:pointer;font-weight:700;text-decoration:none;display:inline-block;text-align:center}
   .primary{background:linear-gradient(180deg,#16a34a,#15803d);color:#fff}
   .secondary{background:#0b1222;color:#e5e7eb;border:1px solid #1f2937}
 
@@ -87,6 +91,7 @@ HTML = """
       <div class="row"><label>Spese condominiali insolute</label><input type="text" name="condominio" value="{{ formvals.condominio }}"></div>
       <div class="row"><label>Nuove utenze (luce+gas)</label><input type="text" name="utenze" value="{{ formvals.utenze }}"></div>
       <div class="row"><label>Imprevisti</label><input type="text" name="imprevisti" value="{{ formvals.imprevisti }}"></div>
+
       <div class="row">
         <label>Tipo di ristrutturazione</label>
         <select name="ristrut_tipo">
@@ -97,14 +102,83 @@ HTML = """
         </select>
       </div>
       <div class="row"><label>Costo ristrutturazione (calcolato)</label><input type="text" value="{{ formvals.ristrutturazione }}" readonly></div>
+
       <div class="actions">
         <button class="btn primary" type="submit">Calcola</button>
         <a href="{{ url_for('reset') }}" class="btn secondary">Reset</a>
       </div>
     </div>
 
-    <!-- (le altre tab rimangono invariate: catastale, vendita, nuovoval) -->
-    <!-- ... -->
+    <!-- TAB: VALORE CATASTALE & REGISTRO -->
+    <div id="catastale" class="tabcontent">
+      <div class="row">
+        <label>Tipo di proprietà</label>
+        <select name="tipo" id="tipo" onchange="autoFillByTipo();updatePreviewCat();">
+          <option value="prima"  {{ 'selected' if formvals.tipo=='prima' else '' }}>Prima casa</option>
+          <option value="seconda"{{ 'selected' if formvals.tipo=='seconda' else '' }}>Seconda casa</option>
+        </select>
+      </div>
+      <div class="row"><label>Rendita catastale</label><input type="text" id="rendita" name="rendita" value="{{ formvals.rendita }}" oninput="updatePreviewCat()"></div>
+      <div class="row"><label>Coefficiente</label><input type="text" id="coeff" name="coeff" value="{{ formvals.coeff }}" oninput="updatePreviewCat()"></div>
+      <div class="row"><label>Imposta di registro %</label><input type="text" id="imposta_pct" name="imposta_pct" value="{{ formvals.imposta_pct }}" oninput="updatePreviewCat()"></div>
+
+      <div class="preview">
+        <h4>Anteprima calcoli</h4>
+        <div class="item"><span>Valore catastale</span><span id="pv_val_cat">—</span></div>
+        <div class="item"><span>Imposta di registro</span><span id="pv_imp_reg">—</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Calcola</button>
+        <a href="{{ url_for('reset') }}" class="btn secondary">Reset</a>
+      </div>
+    </div>
+
+    <!-- TAB: COSTI MESSA IN VENDITA -->
+    <div id="vendita" class="tabcontent">
+      <div class="row">
+        <label>Home staging % (sul prezzo di vendita)</label>
+        <select name="hs_percent" onchange="updatePreviewVendita()">
+          <option value="1" {% if formvals.hs_percent=='1' %}selected{% endif %}>1%</option>
+          <option value="2" {% if formvals.hs_percent=='2' %}selected{% endif %}>2%</option>
+          <option value="3" {% if formvals.hs_percent=='3' %}selected{% endif %}>3%</option>
+        </select>
+      </div>
+      <div class="row"><label>APE</label><input type="text" id="ape" name="ape" value="{{ formvals.ape }}" oninput="updatePreviewVendita()"></div>
+      <div class="row"><label>DICO/DIRI</label><input type="text" id="dico" name="dico" value="{{ formvals.dico }}" oninput="updatePreviewVendita()"></div>
+      <div class="row"><label>Provvigione agenzia vendita %</label><input type="text" id="provv_sale_pct" name="provv_sale_pct" value="{{ formvals.provv_sale_pct }}" oninput="updatePreviewVendita()"></div>
+      <div class="row"><label>Imprevisti</label><input type="text" id="vendita_imprevisti" name="vendita_imprevisti" value="{{ formvals.vendita_imprevisti }}" oninput="updatePreviewVendita()"></div>
+
+      <div class="preview">
+        <h4>Anteprima costi messa in vendita</h4>
+        <div class="item"><span>Home staging</span><span id="pv_hs_cost">—</span></div>
+        <div class="item"><span>APE</span><span id="pv_ape">—</span></div>
+        <div class="item"><span>DICO/DIRI</span><span id="pv_dico">—</span></div>
+        <div class="item"><span>Provvigione agenzia</span><span id="pv_provv">—</span></div>
+        <div class="item"><span>Imprevisti</span><span id="pv_vimp">—</span></div>
+        <hr style="border:none;border-top:1px solid #1f2937;margin:6px 0"/>
+        <div class="item"><b>Totale</b><b id="pv_tot_vendita">—</b></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Calcola</button>
+        <a href="{{ url_for('reset') }}" class="btn secondary">Reset</a>
+      </div>
+    </div>
+
+    <!-- TAB: NUOVO VALORE -->
+    <div id="nuovoval" class="tabcontent">
+      <div class="row"><label>Street price (prezzo giusto di vendita)</label><input type="text" id="street_price" name="street_price" value="{{ formvals.street_price }}" oninput="updatePreviewVal();updatePreviewVendita();"></div>
+      <div class="row"><label>Incremento Home Staging %</label><input type="text" id="inc_hs_pct" name="inc_hs_pct" value="{{ formvals.inc_hs_pct }}" oninput="updatePreviewVal()"></div>
+      <div class="row"><label>Incremento da ristrutturazione %</label><input type="text" id="inc_ristr_pct" name="inc_ristr_pct" value="{{ formvals.inc_ristr_pct }}" oninput="updatePreviewVal()"></div>
+
+      <div class="preview">
+        <h4>Anteprima valore</h4>
+        <div class="item"><span>Valore finale percepito</span><span id="pv_val_finale">—</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit">Calcola</button>
+        <a href="{{ url_for('reset') }}" class="btn secondary">Reset</a>
+      </div>
+    </div>
   </form>
 </div>
 
@@ -121,36 +195,209 @@ HTML = """
     <div class="pill"><b>Valore finale percepito:</b> {{ results.valore_finale }}</div>
     <div class="pill {{ results.roi_class }}"><b>ROI:</b> {{ results.roi }}</div>
   </div>
+
+  <form method="post" action="/download" style="margin-top:12px">
+    {% for k,v in formvals.items() %}
+      <input type="hidden" name="{{k}}" value="{{v}}">
+    {% endfor %}
+    <button class="btn secondary" type="submit">Scarica Excel</button>
+    <a href="{{ url_for('reset') }}" class="btn secondary">Reset</a>
+  </form>
 </div>
 {% endif %}
+
+<script>
+function openTab(evt, tabName) {
+  document.querySelectorAll(".tabcontent").forEach(el => el.style.display="none");
+  document.querySelectorAll(".tablink").forEach(el => el.classList.remove("active"));
+  document.getElementById(tabName).style.display="block";
+  if (evt && evt.currentTarget) evt.currentTarget.classList.add("active");
+  document.getElementById("active_tab").value = tabName;
+}
+function num(v){ if(!v) return 0; v=(""+v).replace(",","."); return parseFloat(v)||0; }
+function fmt(n){ return Math.round(n).toLocaleString('it-IT'); }
+function autoFillByTipo(){
+  const tipo=document.getElementById('tipo').value;
+  if(tipo==='prima'){document.getElementById('coeff').value="115.5";document.getElementById('imposta_pct').value="2";}
+  else{document.getElementById('coeff').value="126";document.getElementById('imposta_pct').value="9";}
+  updatePreviewCat();
+}
+function updatePreviewCat(){
+  const r=num(document.getElementById('rendita').value);
+  const c=num(document.getElementById('coeff').value);
+  const p=num(document.getElementById('imposta_pct').value);
+  const val=r*c; const imp=val*(p/100);
+  document.getElementById('pv_val_cat').innerHTML=fmt(val);
+  document.getElementById('pv_imp_reg').innerHTML=fmt(imp);
+}
+function updatePreviewVendita(){
+  const spEl=document.getElementById("street_price");
+  const sp = spEl ? num(spEl.value) : 0;
+  const hsPercent=num(document.querySelector("[name='hs_percent']").value);
+  const ape=num(document.getElementById("ape").value);
+  const dico=num(document.getElementById("dico").value);
+  const provvPct=num(document.getElementById("provv_sale_pct").value);
+  const vimp=num(document.getElementById("vendita_imprevisti").value);
+  const hsCost=sp*(hsPercent/100);
+  const provv=sp*(provvPct/100);
+  const totale=hsCost+ape+dico+provv+vimp;
+  document.getElementById("pv_hs_cost").innerHTML=fmt(hsCost);
+  document.getElementById("pv_ape").innerHTML=fmt(ape);
+  document.getElementById("pv_dico").innerHTML=fmt(dico);
+  document.getElementById("pv_provv").innerHTML=fmt(provv);
+  document.getElementById("pv_vimp").innerHTML=fmt(vimp);
+  document.getElementById("pv_tot_vendita").innerHTML=fmt(totale);
+}
+function updatePreviewVal(){
+  const sp=num(document.getElementById('street_price').value);
+  const incHS=num(document.getElementById('inc_hs_pct').value);
+  const incR=num(document.getElementById('inc_ristr_pct').value);
+  const valFinale = sp * (1 + incHS/100 + incR/100);
+  document.getElementById('pv_val_finale').innerHTML=fmt(valFinale);
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const initial="{{ active_tab or 'acquisto' }}";
+  const btn=document.querySelector('.tablink[data-tab="'+initial+'"]');
+  if(btn) btn.click(); else openTab(null,'acquisto');
+  updatePreviewCat();
+  updatePreviewVendita();
+  updatePreviewVal();
+});
+</script>
 </body>
 </html>
 """
 
+# -------------------- calcoli backend --------------------
 def compute_results(form):
+    # Acquisto
     ask = parse_num(form.get("ask"))
-    # (calcoli invariati, compreso ROI e roi_class)
-    # ...
-    roi = 0
+    ipotecaria = parse_num(form.get("ipotecaria"))
+    catastale_cost = parse_num(form.get("catastale"))
+    agenzia = parse_num(form.get("agenzia"))
+    architetto = parse_num(form.get("architetto"))
+    condono = parse_num(form.get("condono"))
+    condominio = parse_num(form.get("condominio"))
+    utenze = parse_num(form.get("utenze"))
+    imprevisti = parse_num(form.get("imprevisti"))
+    ristrut_tipo = form.get("ristrut_tipo","nessuna")
+    perc_map = {"nessuna":0,"piccola":0.10,"intermedia":0.20,"complessa":0.60}
+    ristr_perc = perc_map.get(ristrut_tipo,0.0)
+    ristrutturazione = ask * ristr_perc
+
+    # Catastale & Registro
+    tipo = form.get("tipo","prima")
+    rendita = parse_num(form.get("rendita"))
+    coeff = parse_num(form.get("coeff"))
+    imposta_pct = parse_num(form.get("imposta_pct"))
+    valore_catastale = rendita * coeff
+    imposta_registro = valore_catastale * (imposta_pct / 100.0)
+
+    totale_acquisto = (ask + ipotecaria + catastale_cost + agenzia + architetto +
+                       condono + condominio + utenze + imprevisti + ristrutturazione +
+                       imposta_registro)
+
+    # Vendita (costi messa in vendita)
+    street_price = parse_num(form.get("street_price"))
+    hs_percent = parse_num(form.get("hs_percent"))
+    ape = parse_num(form.get("ape"))
+    dico = parse_num(form.get("dico"))
+    provv_sale_pct = parse_num(form.get("provv_sale_pct"))
+    vendita_imprevisti = parse_num(form.get("vendita_imprevisti"))
+
+    hs_cost = street_price * (hs_percent/100.0)
+    provv_sale_cost = street_price * (provv_sale_pct/100.0)
+    costi_vendita = hs_cost + ape + dico + provv_sale_cost + vendita_imprevisti
+
+    # Nuovo Valore
+    inc_hs_pct = parse_num(form.get("inc_hs_pct"))
+    inc_ristr_pct = parse_num(form.get("inc_ristr_pct"))
+    valore_finale = street_price * (1 + inc_hs_pct/100.0 + inc_ristr_pct/100.0)
+
+    # ROI + colore
+    roi = 0.0
     roi_class = ""
     if totale_acquisto > 0:
-        roi = (valore_finale - totale_acquisto) / totale_acquisto * 100
-    if roi > 30:
+        roi = (valore_finale - totale_acquisto) / totale_acquisto * 100.0
+    if roi > 30.0:
         roi_class = "roi-good"
-    results = { "roi_class": roi_class, "roi": f"{roi:.1f}%" }
-    return results, form.to_dict()
 
+    results = {
+        "tipo_label": "Prima casa" if tipo=="prima" else "Seconda casa",
+        "valore_catastale": f"{round(valore_catastale):,}".replace(",", "."),
+        "imposta_registro": f"{round(imposta_registro):,}".replace(",", "."),
+        "ristrutturazione": f"{round(ristrutturazione):,}".replace(",", "."),
+        "totale_acquisto": f"{round(totale_acquisto):,}".replace(",", "."),
+        "costi_vendita": f"{round(costi_vendita):,}".replace(",", "."),
+        "valore_finale": f"{round(valore_finale):,}".replace(",", "."),
+        "roi": f"{roi:.1f}%",
+        "roi_class": roi_class,
+    }
+
+    # formvals aggiornati per i read-only
+    formvals = form.to_dict()
+    formvals["imposta_registro"] = f"{round(imposta_registro):,}".replace(",", ".")
+    formvals["ristrutturazione"] = f"{round(ristrutturazione):,}".replace(",", ".")
+    return results, formvals
+
+# -------------------- routes --------------------
 @app.route("/", methods=["GET","POST"])
 def index():
-    formvals = {...}  # valori di default come prima
-    active_tab = "acquisto"; results=None
-    if request.method=="POST":
+    # default form values
+    formvals = {
+        # Acquisto
+        "ask":"150000","ipotecaria":"50","catastale":"50","agenzia":"3000","architetto":"2000",
+        "condono":"0","condominio":"0","utenze":"500","imprevisti":"2000",
+        "ristrut_tipo":"nessuna","ristrutturazione":"0",
+        # Catastale & Registro
+        "tipo":"prima","rendita":"500","coeff":"115.5","imposta_pct":"2","imposta_registro":"0",
+        # Vendita
+        "hs_percent":"2","ape":"200","dico":"250","provv_sale_pct":"3","vendita_imprevisti":"500",
+        # Nuovo Valore
+        "street_price":"220000","inc_hs_pct":"5","inc_ristr_pct":"10"
+    }
+    active_tab = "acquisto"
+    results = None
+
+    if request.method == "POST":
+        active_tab = request.form.get("active_tab", "acquisto")
+        for k in formvals.keys():
+            if k in request.form and request.form.get(k) != "":
+                formvals[k] = request.form.get(k)
         results, formvals = compute_results(request.form)
+
     return render_template_string(HTML, results=results, active_tab=active_tab, formvals=formvals)
+
+@app.route("/download", methods=["POST"])
+def download_excel():
+    results, inputs = compute_results(request.form)
+    # Input sheet
+    df_inputs = pd.DataFrame(inputs.items(), columns=["Voce","Valore"])
+    # Results sheet
+    df_results = pd.DataFrame([
+        ["Tipo proprietà", results["tipo_label"]],
+        ["Valore catastale", results["valore_catastale"]],
+        ["Imposta di registro", results["imposta_registro"]],
+        ["Costo ristrutturazione", results["ristrutturazione"]],
+        ["Totale costi acquisto", results["totale_acquisto"]],
+        ["Costi messa in vendita", results["costi_vendita"]],
+        ["Valore finale percepito", results["valore_finale"]],
+        ["ROI", results["roi"]],
+    ], columns=["Risultato","Valore"])
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_inputs.to_excel(writer, index=False, sheet_name="Input")
+        df_results.to_excel(writer, index=False, sheet_name="Risultati")
+    output.seek(0)
+    return send_file(output, as_attachment=True, download_name="deal_checker.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/reset")
 def reset():
+    # torna alla pagina senza risultati (riepilogo nascosto)
     return redirect(url_for("index"))
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=5000)
+# -------------------- main --------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
