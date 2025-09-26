@@ -4,6 +4,7 @@ import pandas as pd
 
 app = Flask(__name__)
 
+# --- utility: numeri con virgola o punto ---
 def parse_num(value, default=0.0):
     if value is None:
         return default
@@ -26,11 +27,11 @@ HTML = """
         font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial }
   header{text-align:center;padding:16px}
   h1{margin:0;font-size:24px}
-  .wrap{max-width:1000px;margin:0 auto;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto;padding:20px}
   .card{background:rgba(17,24,39,.85);border:1px solid #1f2937;border-radius:14px;
         padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.25);margin-bottom:16px}
 
-  .tabs{display:flex;justify-content:center;gap:30px;margin-bottom:16px;border-bottom:2px solid #1f2937}
+  .tabs{display:flex;flex-wrap:wrap;justify-content:center;gap:30px;margin-bottom:16px;border-bottom:2px solid #1f2937}
   .tablink{background:none;border:none;color:#94a3b8;font-weight:600;font-size:15px;
            padding:10px 0;cursor:pointer;position:relative;transition:color .25s}
   .tablink:hover{color:#e5e7eb}
@@ -50,12 +51,15 @@ HTML = """
   .results{margin-top:20px}
   .pill{background:#0b1222;border:1px solid #1f2937;border-radius:12px;padding:10px;margin:6px 0}
   .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 
   .preview{margin-top:10px;padding:12px;border-radius:12px;background:#0b1222;border:1px solid #1f2937}
   .preview h4{margin:0 0 8px;font-size:14px;color:#cbd5e1}
   .preview .item{display:flex;justify-content:space-between;margin:4px 0;font-size:14px}
   .preview .item span:first-child{color:#a7b2c3}
   .muted{color:#94a3b8;font-size:12px;margin-top:4px}
+  .notes{margin-top:10px;color:#e5e7eb}
+  .notes b{color:#fff}
 </style>
 </head>
 <body>
@@ -69,29 +73,31 @@ HTML = """
     <input type="hidden" id="active_tab" name="active_tab" value="{{ active_tab or 'acquisto' }}"/>
 
     <div class="tabs">
-      <button type="button" class="tablink" data-tab="acquisto" onclick="openTab(event, 'acquisto')">Acquisto</button>
-      <button type="button" class="tablink" data-tab="catastale" onclick="openTab(event, 'catastale')">Valore Catastale & Registro</button>
+      <button type="button" class="tablink" data-tab="acquisto"   onclick="openTab(event, 'acquisto')">Acquisto</button>
+      <button type="button" class="tablink" data-tab="catastale"  onclick="openTab(event, 'catastale')">Valore Catastale & Registro</button>
+      <button type="button" class="tablink" data-tab="vendita"    onclick="openTab(event, 'vendita')">Costi messa in vendita</button>
+      <button type="button" class="tablink" data-tab="nuovoval"   onclick="openTab(event, 'nuovoval')">Nuovo Valore</button>
     </div>
 
-    <!-- TAB ACQUISTO -->
+    <!-- TAB: ACQUISTO -->
     <div id="acquisto" class="tabcontent">
       <div class="row"><label>Acquisto immobile</label><input type="text" name="ask" value="{{ formvals.ask }}"></div>
       <div class="row"><label>Imposta ipotecaria</label><input type="text" name="ipotecaria" value="{{ formvals.ipotecaria }}"></div>
       <div class="row"><label>Imposta catastale</label><input type="text" name="catastale" value="{{ formvals.catastale }}"></div>
       <div class="row"><label>Imposta di registro</label><input type="text" value="{{ formvals.imposta_registro }}" readonly></div>
-      <div class="row"><label>Provvigioni agenzia</label><input type="text" name="agenzia" value="{{ formvals.agenzia }}"></div>
+      <div class="row"><label>Provvigioni agenzia (acquisto)</label><input type="text" name="agenzia" value="{{ formvals.agenzia }}"></div>
       <div class="row"><label>Studio architetto</label><input type="text" name="architetto" value="{{ formvals.architetto }}"></div>
       <div class="row"><label>Condono</label><input type="text" name="condono" value="{{ formvals.condono }}"></div>
       <div class="row"><label>Spese condominiali insolute</label><input type="text" name="condominio" value="{{ formvals.condominio }}"></div>
       <div class="row"><label>Nuove utenze (luce+gas)</label><input type="text" name="utenze" value="{{ formvals.utenze }}"></div>
       <div class="row"><label>Imprevisti</label><input type="text" name="imprevisti" value="{{ formvals.imprevisti }}"></div>
-      <!-- Nuova tendina ristrutturazione -->
+
       <div class="row">
         <label>Tipo di ristrutturazione</label>
         <select name="ristrut_tipo">
-          <option value="nessuna" {% if formvals.ristrut_tipo=='nessuna' %}selected{% endif %}>Nessuna</option>
-          <option value="piccola" {% if formvals.ristrut_tipo=='piccola' %}selected{% endif %}>Piccoli interventi (10%)</option>
-          <option value="intermedia" {% if formvals.ristrut_tipo=='intermedia' %}selected{% endif %}>Ristrutturazione intermedia (20%)</option>
+          <option value="nessuna"   {% if formvals.ristrut_tipo=='nessuna' %}selected{% endif %}>Nessuna</option>
+          <option value="piccola"   {% if formvals.ristrut_tipo=='piccola' %}selected{% endif %}>Piccoli interventi (10%)</option>
+          <option value="intermedia"{% if formvals.ristrut_tipo=='intermedia' %}selected{% endif %}>Ristrutturazione intermedia (20%)</option>
           <option value="complessa" {% if formvals.ristrut_tipo=='complessa' %}selected{% endif %}>Ristrutturazione complessa (60%)</option>
         </select>
       </div>
@@ -100,23 +106,56 @@ HTML = """
       <div class="actions"><button class="btn primary" type="submit">Calcola</button></div>
     </div>
 
-    <!-- TAB CATASTALE -->
+    <!-- TAB: VALORE CATASTALE & REGISTRO -->
     <div id="catastale" class="tabcontent">
       <div class="row">
         <label>Tipo di proprietà</label>
-        <select name="tipo" id="tipo" onchange="autoFillByTipo();updatePreview();">
-          <option value="prima" {{ 'selected' if formvals.tipo=='prima' else '' }}>Prima casa</option>
-          <option value="seconda" {{ 'selected' if formvals.tipo=='seconda' else '' }}>Seconda casa</option>
+        <select name="tipo" id="tipo" onchange="autoFillByTipo();updatePreviewCat();">
+          <option value="prima"  {{ 'selected' if formvals.tipo=='prima' else '' }}>Prima casa</option>
+          <option value="seconda"{{ 'selected' if formvals.tipo=='seconda' else '' }}>Seconda casa</option>
         </select>
       </div>
-      <div class="row"><label>Rendita catastale</label><input type="text" id="rendita" name="rendita" value="{{ formvals.rendita }}" oninput="updatePreview()"></div>
-      <div class="row"><label>Coefficiente</label><input type="text" id="coeff" name="coeff" value="{{ formvals.coeff }}" oninput="updatePreview()"></div>
-      <div class="row"><label>Imposta di registro %</label><input type="text" id="imposta_pct" name="imposta_pct" value="{{ formvals.imposta_pct }}" oninput="updatePreview()"></div>
+      <div class="row"><label>Rendita catastale</label><input type="text" id="rendita" name="rendita" value="{{ formvals.rendita }}" oninput="updatePreviewCat()"></div>
+      <div class="row"><label>Coefficiente</label><input type="text" id="coeff" name="coeff" value="{{ formvals.coeff }}" oninput="updatePreviewCat()"></div>
+      <div class="row"><label>Imposta di registro %</label><input type="text" id="imposta_pct" name="imposta_pct" value="{{ formvals.imposta_pct }}" oninput="updatePreviewCat()"></div>
+
       <div class="preview">
         <h4>Anteprima calcoli</h4>
         <div class="item"><span>Valore catastale</span><span id="pv_val_cat">—</span></div>
         <div class="item"><span>Imposta di registro</span><span id="pv_imp_reg">—</span></div>
       </div>
+      <div class="actions"><button class="btn primary" type="submit">Calcola</button></div>
+    </div>
+
+    <!-- TAB: COSTI MESSA IN VENDITA -->
+    <div id="vendita" class="tabcontent">
+      <div class="row">
+        <label>Home staging % (sul prezzo di vendita)</label>
+        <select name="hs_percent">
+          <option value="1" {% if formvals.hs_percent=='1' %}selected{% endif %}>1%</option>
+          <option value="2" {% if formvals.hs_percent=='2' %}selected{% endif %}>2%</option>
+          <option value="3" {% if formvals.hs_percent=='3' %}selected{% endif %}>3%</option>
+        </select>
+      </div>
+      <div class="row"><label>APE</label><input type="text" name="ape" value="{{ formvals.ape }}"></div>
+      <div class="row"><label>DICO/DIRI (conformità impianti)</label><input type="text" name="dico" value="{{ formvals.dico }}"></div>
+      <div class="row"><label>Provvigione agenzia vendita %</label><input type="text" name="provv_sale_pct" value="{{ formvals.provv_sale_pct }}"></div>
+      <div class="row"><label>Imprevisti (vendita)</label><input type="text" name="vendita_imprevisti" value="{{ formvals.vendita_imprevisti }}"></div>
+
+      <div class="actions"><button class="btn primary" type="submit">Calcola</button></div>
+    </div>
+
+    <!-- TAB: NUOVO VALORE -->
+    <div id="nuovoval" class="tabcontent">
+      <div class="row"><label>Street price (prezzo giusto di vendita)</label><input type="text" id="street_price" name="street_price" value="{{ formvals.street_price }}" oninput="updatePreviewVal()"></div>
+      <div class="row"><label>Incremento Home Staging %</label><input type="text" id="inc_hs_pct" name="inc_hs_pct" value="{{ formvals.inc_hs_pct }}" oninput="updatePreviewVal()"></div>
+      <div class="row"><label>Incremento da ristrutturazione %</label><input type="text" id="inc_ristr_pct" name="inc_ristr_pct" value="{{ formvals.inc_ristr_pct }}" oninput="updatePreviewVal()"></div>
+
+      <div class="preview">
+        <h4>Anteprima valore</h4>
+        <div class="item"><span>Valore finale percepito</span><span id="pv_val_finale">—</span></div>
+      </div>
+
       <div class="actions"><button class="btn primary" type="submit">Calcola</button></div>
     </div>
   </form>
@@ -125,13 +164,22 @@ HTML = """
 {% if results %}
 <div class="wrap card results">
   <h2>Riepilogo</h2>
-  <div class="grid2">
+  <div class="grid3">
     <div class="pill"><b>Tipo proprietà:</b> {{ results.tipo_label }}</div>
     <div class="pill"><b>Valore catastale:</b> {{ results.valore_catastale }}</div>
     <div class="pill"><b>Imposta di registro:</b> {{ results.imposta_registro }}</div>
     <div class="pill"><b>Costo ristrutturazione:</b> {{ results.ristrutturazione }}</div>
-    <div class="pill"><b>Totale costi acquisto:</b> {{ results.totale }}</div>
+    <div class="pill"><b>Totale costi acquisto:</b> {{ results.totale_acquisto }}</div>
+    <div class="pill"><b>Costi messa in vendita:</b> {{ results.costi_vendita }}</div>
+    <div class="pill"><b>Valore finale percepito:</b> {{ results.valore_finale }}</div>
   </div>
+
+  <div class="notes">
+    <b>Note:</b>
+    incremento Home Staging = {{ results.note_inc_hs }} | incremento ristrutturazione = {{ results.note_inc_ristr }} |
+    home staging costo = {{ results.note_hs_cost }} su street price {{ results.note_street_price }}
+  </div>
+
   <form method="post" action="/download" style="margin-top:12px">
     {% for k,v in formvals.items() %}
       <input type="hidden" name="{{k}}" value="{{v}}">
@@ -151,20 +199,46 @@ function openTab(evt, tabName) {
 }
 function num(v){ if(!v) return 0; v=(""+v).replace(",","."); return parseFloat(v)||0; }
 function fmt(n){ return Math.round(n).toLocaleString('it-IT'); }
-function autoFillByTipo(){ let tipo=document.getElementById('tipo').value;
+
+/* Catastale preview */
+function autoFillByTipo(){
+  const tipo=document.getElementById('tipo').value;
   if(tipo==='prima'){document.getElementById('coeff').value="115.5";document.getElementById('imposta_pct').value="2";}
-  else{document.getElementById('coeff').value="126";document.getElementById('imposta_pct').value="9";} updatePreview();}
-function updatePreview(){ let r=num(document.getElementById('rendita').value);
-  let c=num(document.getElementById('coeff').value); let p=num(document.getElementById('imposta_pct').value);
-  let val=r*c; let imp=val*(p/100); document.getElementById('pv_val_cat').innerHTML=fmt(val);
-  document.getElementById('pv_imp_reg').innerHTML=fmt(imp); }
-document.addEventListener('DOMContentLoaded',()=>{ openTab(null,"{{ active_tab or 'acquisto' }}"); updatePreview(); });
+  else{document.getElementById('coeff').value="126";document.getElementById('imposta_pct').value="9";}
+  updatePreviewCat();
+}
+function updatePreviewCat(){
+  const r=num(document.getElementById('rendita').value);
+  const c=num(document.getElementById('coeff').value);
+  const p=num(document.getElementById('imposta_pct').value);
+  const val=r*c; const imp=val*(p/100);
+  document.getElementById('pv_val_cat').innerHTML=fmt(val);
+  document.getElementById('pv_imp_reg').innerHTML=fmt(imp);
+}
+
+/* Nuovo Valore preview */
+function updatePreviewVal(){
+  const sp=num(document.getElementById('street_price').value);
+  const incHS=num(document.getElementById('inc_hs_pct').value);
+  const incR=num(document.getElementById('inc_ristr_pct').value);
+  const valFinale = sp * (1 + incHS/100 + incR/100);
+  document.getElementById('pv_val_finale').innerHTML=fmt(valFinale);
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const initial="{{ active_tab or 'acquisto' }}";
+  const btn=document.querySelector('.tablink[data-tab="'+initial+'"]');
+  if(btn) btn.click(); else openTab(null,'acquisto');
+  updatePreviewCat();
+  updatePreviewVal();
+});
 </script>
 </body>
 </html>
 """
 
 def compute_results(form):
+    # --- ACQUISTO ---
     ask = parse_num(form.get("ask"))
     ipotecaria = parse_num(form.get("ipotecaria"))
     catastale_cost = parse_num(form.get("catastale"))
@@ -174,49 +248,82 @@ def compute_results(form):
     condominio = parse_num(form.get("condominio"))
     utenze = parse_num(form.get("utenze"))
     imprevisti = parse_num(form.get("imprevisti"))
+    ristrut_tipo = form.get("ristrut_tipo","nessuna")
+    perc_map = {"nessuna":0,"piccola":0.10,"intermedia":0.20,"complessa":0.60}
+    ristr_perc = perc_map.get(ristrut_tipo,0.0)
+    ristrutturazione = ask * ristr_perc
 
+    # --- CATASTALE & REGISTRO ---
     tipo = form.get("tipo","prima")
     rendita = parse_num(form.get("rendita"))
     coeff = parse_num(form.get("coeff"))
     imposta_pct = parse_num(form.get("imposta_pct"))
-
     valore_catastale = rendita * coeff
     imposta_registro = valore_catastale * (imposta_pct / 100.0)
 
-    # Calcolo ristrutturazione
-    ristrut_tipo = form.get("ristrut_tipo","nessuna")
-    perc = {"nessuna":0,"piccola":0.10,"intermedia":0.20,"complessa":0.60}[ristrut_tipo]
-    ristrutturazione = ask * perc
+    totale_acquisto = (ask + ipotecaria + catastale_cost + agenzia + architetto +
+                       condono + condominio + utenze + imprevisti + ristrutturazione +
+                       imposta_registro)
 
-    totale = (ask + ipotecaria + catastale_cost + agenzia + architetto +
-              condono + condominio + utenze + imprevisti + ristrutturazione +
-              imposta_registro)
+    # --- COSTI MESSA IN VENDITA ---
+    street_price = parse_num(form.get("street_price"))  # usato anche sotto
+    hs_percent = parse_num(form.get("hs_percent"))
+    ape = parse_num(form.get("ape"))
+    dico = parse_num(form.get("dico"))
+    provv_sale_pct = parse_num(form.get("provv_sale_pct"))
+    vendita_imprevisti = parse_num(form.get("vendita_imprevisti"))
+
+    hs_cost = street_price * (hs_percent/100.0)
+    provv_sale_cost = street_price * (provv_sale_pct/100.0)
+    costi_vendita = hs_cost + ape + dico + provv_sale_cost + vendita_imprevisti
+
+    # --- NUOVO VALORE ---
+    inc_hs_pct = parse_num(form.get("inc_hs_pct"))
+    inc_ristr_pct = parse_num(form.get("inc_ristr_pct"))
+    valore_finale = street_price * (1 + inc_hs_pct/100.0 + inc_ristr_pct/100.0)
 
     results = {
         "tipo_label": "Prima casa" if tipo=="prima" else "Seconda casa",
         "valore_catastale": f"{round(valore_catastale):,}".replace(",", "."),
         "imposta_registro": f"{round(imposta_registro):,}".replace(",", "."),
         "ristrutturazione": f"{round(ristrutturazione):,}".replace(",", "."),
-        "totale": f"{round(totale):,}".replace(",", "."),
+        "totale_acquisto": f"{round(totale_acquisto):,}".replace(",", "."),
+        "costi_vendita": f"{round(costi_vendita):,}".replace(",", "."),
+        "valore_finale": f"{round(valore_finale):,}".replace(",", "."),
+        # note
+        "note_inc_hs": f"{inc_hs_pct:.1f}%",
+        "note_inc_ristr": f"{inc_ristr_pct:.1f}%",
+        "note_hs_cost": f"{round(hs_cost):,}".replace(",", "."),
+        "note_street_price": f"{round(street_price):,}".replace(",", "."),
     }
 
-    inputs = form.to_dict()
-    inputs["imposta_registro"] = round(imposta_registro,2)
-    inputs["ristrutturazione"] = round(ristrutturazione,2)
-    return results, inputs
+    # formvals aggiornati (per persistenza) + calcolati che devono riempire read-only
+    formvals = form.to_dict()
+    formvals["imposta_registro"] = f"{round(imposta_registro):,}".replace(",", ".")
+    formvals["ristrutturazione"] = f"{round(ristrutturazione):,}".replace(",", ".")
+    return results, formvals
 
 @app.route("/", methods=["GET","POST"])
 def index():
-    formvals = {"ask":"150000","ipotecaria":"50","catastale":"50","agenzia":"3000","architetto":"2000",
-                "condono":"0","condominio":"0","utenze":"500","imprevisti":"2000",
-                "tipo":"prima","rendita":"500","coeff":"115.5","imposta_pct":"2","imposta_registro":"0",
-                "ristrut_tipo":"nessuna","ristrutturazione":"0"}
+    formvals = {
+        # Acquisto
+        "ask":"150000","ipotecaria":"50","catastale":"50","agenzia":"3000","architetto":"2000",
+        "condono":"0","condominio":"0","utenze":"500","imprevisti":"2000",
+        "ristrut_tipo":"nessuna","ristrutturazione":"0",
+        # Catastale & Registro
+        "tipo":"prima","rendita":"500","coeff":"115.5","imposta_pct":"2","imposta_registro":"0",
+        # Vendita
+        "hs_percent":"2","ape":"200","dico":"250","provv_sale_pct":"3","vendita_imprevisti":"500",
+        # Nuovo Valore
+        "street_price":"220000","inc_hs_pct":"5","inc_ristr_pct":"10"
+    }
     active_tab = "acquisto"; results=None
 
     if request.method=="POST":
         active_tab=request.form.get("active_tab","acquisto")
         for k in formvals.keys():
-            if k in request.form and request.form.get(k)!="": formvals[k]=request.form.get(k)
+            if k in request.form and request.form.get(k)!="":
+                formvals[k]=request.form.get(k)
         results, formvals = compute_results(request.form)
 
     return render_template_string(HTML, results=results, active_tab=active_tab, formvals=formvals)
@@ -224,8 +331,25 @@ def index():
 @app.route("/download", methods=["POST"])
 def download_excel():
     results, inputs = compute_results(request.form)
+
+    # INPUT sheet (chiave/valore)
     df_inputs = pd.DataFrame(inputs.items(), columns=["Voce","Valore"])
-    df_results = pd.DataFrame(results.items(), columns=["Risultato","Valore"])
+
+    # RISULTATI sheet (riepilogo chiave/valore)
+    df_results = pd.DataFrame([
+        ["Tipo proprietà", results["tipo_label"]],
+        ["Valore catastale", results["valore_catastale"]],
+        ["Imposta di registro", results["imposta_registro"]],
+        ["Costo ristrutturazione", results["ristrutturazione"]],
+        ["Totale costi acquisto", results["totale_acquisto"]],
+        ["Costi messa in vendita", results["costi_vendita"]],
+        ["Valore finale percepito", results["valore_finale"]],
+        ["Note incremento HS", results["note_inc_hs"]],
+        ["Note incremento ristrutturazione", results["note_inc_ristr"]],
+        ["Home staging costo", results["note_hs_cost"]],
+        ["Street price", results["note_street_price"]],
+    ], columns=["Risultato","Valore"])
+
     output=io.BytesIO()
     with pd.ExcelWriter(output,engine="openpyxl") as writer:
         df_inputs.to_excel(writer,index=False,sheet_name="Input")
