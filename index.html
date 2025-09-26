@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Deal Checker Immobiliare</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#111827; --muted:#94a3b8; --accent:#22c55e; --bad:#ef4444; --warn:#f59e0b; --txt:#e5e7eb;
+    --ring:#374151;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b1023,#0e1227 40%,#0f172a);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial}
+  header{padding:18px 16px 6px;text-align:center}
+  header h1{margin:4px 0 0;font-size:22px;font-weight:700}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px}
+  .wrap{max-width:980px;margin:12px auto;padding:0 12px 64px}
+  .grid{display:grid;gap:14px}
+  @media(min-width:900px){.grid{grid-template-columns:1.2fr 1fr}}
+  .card{background:rgba(17,24,39,.75);backdrop-filter:blur(8px);border:1px solid #1f2937;border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .card h2{font-size:14px;margin:0 0 10px;color:#cbd5e1;letter-spacing:.3px;text-transform:uppercase}
+  .row{display:grid;grid-template-columns:1fr 110px;gap:10px;align-items:center;margin:8px 0}
+  .row.inline2{grid-template-columns:1fr 1fr}
+  input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--ring);background:#0b1023;color:var(--txt);font-size:14px;outline:none}
+  input:focus,select:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(59,130,246,.25)}
+  .muted{color:var(--muted);font-size:12px;margin-top:4px}
+  .kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  @media(min-width:520px){.kpi{grid-template-columns:repeat(4,1fr)}}
+  .pill{background:#0b1222;border:1px solid #1f2937;border-radius:12px;padding:10px}
+  .pill h3{margin:0;font-size:12px;color:#a7b2c3}
+  .pill p{margin:4px 0 0;font-size:18px;font-weight:700}
+  .ok{color:var(--accent)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  button{padding:10px 12px;border-radius:10px;border:1px solid #1f2937;background:#0b1222;color:#e5e7eb;font-weight:600;cursor:pointer}
+  button.primary{background:linear-gradient(180deg,#16a34a,#15803d);border-color:#166534}
+  .hr{height:1px;background:#1f2937;margin:10px 0}
+  footer{opacity:.7;text-align:center;font-size:12px;margin-top:16px}
+  .small{font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏠 Deal Checker Immobiliare</h1>
+  <p>Calcola all-in, sconto necessario, target offerta, yield e cashflow — mobile-ready</p>
+</header>
+
+<div class="wrap grid">
+  <!-- INPUTS -->
+  <section class="card">
+    <h2>Dettagli operazione</h2>
+    <div class="row"><label>Prezzo richiesto (&euro;)</label><input type="number" id="ask" value="150000" min="0" step="1000"></div>
+    <div class="row inline2">
+      <div><label>Metri quadri</label><input type="number" id="mq" value="80" min="0" step="1"></div>
+      <div><label>Ristrutturazione &euro;/mq</label><input type="number" id="reno" value="600" min="0" step="10"></div>
+    </div>
+    <div class="row inline2">
+      <div><label>Imprevisti / Extra (%)</label><input type="number" id="cont" value="10" min="0" step="1"></div>
+      <div><label>Altre spese fisse (&euro;)</label><input type="number" id="sp_fisse" value="0" min="0" step="500"></div>
+    </div>
+    <div class="hr"></div>
+    <h2>Acquisto & imposte</h2>
+    <div class="row inline2">
+      <div><label>Imposte/Notaio (%)</label><input type="number" id="taxes" value="4" min="0" step="0.5"></div>
+      <div><label>Provvigione agenzia (%)</label><input type="number" id="agency" value="3" min="0" step="0.5"></div>
+    </div>
+    <p class="muted">Imposte/notaio e provvigione sono % del prezzo di acquisto (modificale a piacere).</p>
+
+    <div class="hr"></div>
+    <h2>Finanziamento (opzionale)</h2>
+    <div class="row inline2">
+      <div><label>Mutuo (&euro;)</label><input type="number" id="loan" value="0" min="0" step="1000"></div>
+      <div><label>Tasso annuo (%)</label><input type="number" id="rate" value="4" min="0" step="0.1"></div>
+    </div>
+    <div class="row inline2">
+      <div><label>Durata (anni)</label><input type="number" id="years" value="25" min="1" step="1"></div>
+      <div><label>Spese mensili (&euro;)</label><input type="number" id="opex" value="120" min="0" step="10"></div>
+    </div>
+
+    <div class="hr"></div>
+    <h2>Affitto & uscita</h2>
+    <div class="row inline2">
+      <div><label>Canone mensile (&euro;)</label><input type="number" id="rent" value="900" min="0" step="10"></div>
+      <div><label>Vacanza (%)</label><input type="number" id="vac" value="8" min="0" step="1"></div>
+    </div>
+    <div class="row"><label>ARV / Street price (&euro;)</label><input type="number" id="arv" value="210000" min="0" step="1000"></div>
+    <div class="row inline2">
+      <div><label>Profitto obiettivo (&euro;)</label><input type="number" id="targetProfit" value="20000" min="0" step="1000"></div>
+      <div><label>Costi post-acquisto (%)</label><input type="number" id="postPct" value="30" min="0" step="1"></div>
+    </div>
+    <p class="muted">“Costi post-acquisto (%)” è la tua stima totale (ristrutturazione+imposte+extra) per il calcolo dell’offerta massima teorica dall’ARV.</p>
+
+    <div class="actions">
+      <button class="primary" id="calc">Calcola</button>
+      <button id="save">Salva impostazioni</button>
+      <button id="reset">Reset</button>
+    </div>
+  </section>
+
+  <!-- OUTPUTS -->
+  <section class="card">
+    <h2>Risultati</h2>
+    <div class="kpi" id="kpis">
+      <div class="pill"><h3>Ristrutturazione</h3><p id="renoTot">–</p></div>
+      <div class="pill"><h3>Costi acquisto</h3><p id="acqCosts">–</p></div>
+      <div class="pill"><h3>All-in</h3><p id="allin">–</p></div>
+      <div class="pill"><h3>Margine vs ARV</h3><p id="margin">–</p></div>
+      <div class="pill"><h3>Sconto su ARV</h3><p id="disc">–</p></div>
+      <div class="pill"><h3>Target Max Offer</h3><p id="maxOffer">–</p></div>
+      <div class="pill"><h3>Rata stimata</h3><p id="rata">–</p></div>
+      <div class="pill"><h3>Yield / Cashflow</h3><p id="yieldCf">–</p></div>
+    </div>
+    <p class="muted small" id="note"></p>
+    <div class="hr"></div>
+    <footer>Consigli indicativi. Verifica sempre con tecnico/notai e dati reali di zona.</footer>
+  </section>
+</div>
+
+<script>
+const fmtEur = n => (isNaN(n)||n==null) 
+  ? "–" 
+  : n.toLocaleString('it-IT',{minimumFractionDigits:0, maximumFractionDigits:0}) + " &euro;";
+
+const pct = n => isNaN(n)||n==null ? "–" : (n.toFixed(1).replace('.',','))+"%";
+function val(id){ return Number(document.getElementById(id).value || 0); }
+
+function pmt(rate, nper, pv){
+  if (rate===0) return pv / nper;
+  const r = rate;
+  return (r*pv) / (1 - Math.pow(1+r, -nper));
+}
+
+function calc(){
+  const ask = val('ask'), mq = val('mq'), reno = val('reno'), cont = val('cont');
+  const sp_fisse = val('sp_fisse'), taxes = val('taxes'), agency = val('agency');
+  const loan = val('loan'), rateA = val('rate')/100, years = val('years');
+  const opex = val('opex'), rent = val('rent'), vac = val('vac')/100;
+  const arv = val('arv'), targetProfit = val('targetProfit'), postPct = val('postPct')/100;
+
+  const renoTot = mq*reno*(1+cont/100);
+  const acqCosts = ask*(taxes/100 + agency/100) + sp_fisse;
+  const allIn = ask + renoTot + acqCosts;
+
+  const margin = arv ? (arv - allIn) : null;
+  const discountNeeded = arv ? (1 - (ask / arv))*100 : null;
+  const maxOffer = arv ? (arv/(1+postPct) - targetProfit) : null;
+
+  const nper = years*12;
+  const rateM = rateA/12;
+  const rata = loan>0 ? pmt(rateM, nper, loan) : 0;
+
+  const effRent = rent*(1 - vac);
+  const cashflow = effRent - opex - rata;
+  const grossYield = (rent*12) / (allIn||1) * 100;
+
+  set('renoTot', fmtEur(renoTot));
+  set('acqCosts', fmtEur(acqCosts));
+  set('allin', fmtEur(allIn));
+  set('margin', (margin!=null ? (margin>=0?'<span class="ok">'+fmtEur(margin)+'</span>':'<span class="bad">'+fmtEur(margin)+'</span>') : '–'));
+  set('disc', discountNeeded!=null ? pct(discountNeeded) : '–');
+  set('maxOffer', maxOffer!=null ? fmtEur(Math.max(0, Math.floor(maxOffer))) : '–');
+  set('rata', rata? fmtEur(Math.round(rata)) : '–');
+  set('yieldCf', `${pct(grossYield)} / ${ (cashflow>=0?'<span class="ok">'+fmtEur(cashflow)+'</span>':'<span class="bad">'+fmtEur(cashflow)+'</span>') }`);
+
+  document.getElementById('note').innerHTML =
+    `All-in = Prezzo + Ristrutturazione + Imposte/Notaio/Agenzia. 
+     L’“offerta massima” è calcolata come ARV / (1 + costi post-acquisto %) − profitto obiettivo. 
+     Se imposti “costi post-acquisto” al 30%, la max offer è ≈ ARV/1,30 − profitto.`;
+}
+
+function set(id, html){ document.getElementById(id).innerHTML = html; }
+
+function save(){
+  const ids = ['ask','mq','reno','cont','sp_fisse','taxes','agency','loan','rate','years','opex','rent','vac','arv','targetProfit','postPct'];
+  const obj={}; ids.forEach(i=>obj[i]=document.getElementById(i).value);
+  localStorage.setItem('dealcfg', JSON.stringify(obj));
+}
+
+function load(){
+  const raw = localStorage.getItem('dealcfg'); if(!raw) return;
+  try{
+    const obj = JSON.parse(raw);
+    Object.keys(obj).forEach(k=>{ if(document.getElementById(k)) document.getElementById(k).value = obj[k]; });
+  }catch(e){}
+}
+
+document.getElementById('calc').addEventListener('click', calc);
+document.getElementById('save').addEventListener('click', ()=>{ save(); calc(); });
+document.getElementById('reset').addEventListener('click', ()=>{
+  localStorage.removeItem('dealcfg'); location.reload();
+});
+
+load(); calc();
+</script>
+</body>
+</html>
