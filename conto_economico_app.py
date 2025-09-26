@@ -22,7 +22,7 @@ HTML = """
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Deal Checker Immobiliare</title>
+<title>Calcolo Conto Economico</title>
 <style>
   :root{ --bg:#0f172a; --card:#111827; --muted:#94a3b8; --accent:#22c55e; --txt:#e5e7eb; --ring:#374151; }
   body{ margin:0; background:linear-gradient(180deg,#0b1023,#0e1227 40%,#0f172a); color:var(--txt);
@@ -34,7 +34,14 @@ HTML = """
         padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.25);margin-bottom:16px}
   .card.results{background:#1e293b;} /* riepilogo blu più chiaro */
 
-  .tabs{display:flex;flex-wrap:wrap;justify-content:center;gap:30px;margin-bottom:16px;border-bottom:2px solid #1f2937}
+  /* Parent tabs */
+  .parent-tabs{display:flex;justify-content:center;gap:12px;margin:14px auto 0;flex-wrap:wrap}
+  .parent-btn{padding:10px 14px;border-radius:12px;border:1px solid #1f2937;background:#0b1222;color:#e5e7eb;
+              font-weight:700;cursor:pointer}
+  .parent-btn.active{background:#0f1d35;border-color:#243b55;box-shadow:0 0 0 2px #0f1d35 inset}
+
+  /* Child tabs */
+  .tabs{display:flex;flex-wrap:wrap;justify-content:center;gap:30px;margin:12px 0 16px;border-bottom:2px solid #1f2937}
   .tablink{background:none;border:none;color:#94a3b8;font-weight:600;font-size:15px;
            padding:10px 0;cursor:pointer;position:relative;transition:color .25s}
   .tablink:hover{color:#e5e7eb}
@@ -60,16 +67,28 @@ HTML = """
   .preview h4{margin:0 0 8px;font-size:14px;color:#cbd5e1}
   .preview .item{display:flex;justify-content:space-between;margin:4px 0;font-size:14px}
   .preview .item span:first-child{color:#a7b2c3}
+
+  .muted{color:#94a3b8;font-size:13px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Deal Checker Immobiliare</h1>
-  <p>Conto economico compravendita</p>
+  <h1>Calcolo Conto Economico</h1>
+  <p>Strumento per analisi investimenti immobiliari</p>
 </header>
 
 <div class="wrap card">
+  <!-- Parent tabs -->
+  <div class="parent-tabs">
+    <button type="button" class="parent-btn" data-parent="compravendita" onclick="openParent('compravendita')">Compravendita</button>
+    <button type="button" class="parent-btn" data-parent="affitti" onclick="openParent('affitti')">Affitti</button>
+  </div>
+</div>
+
+<!-- ========================== COMPRAVENDITA ========================== -->
+<div class="wrap card parent-section" id="parent-compravendita">
   <form method="post" id="mainForm">
+    <input type="hidden" id="parent_tab" name="parent_tab" value="{{ parent_tab or 'compravendita' }}"/>
     <input type="hidden" id="active_tab" name="active_tab" value="{{ active_tab or 'acquisto' }}"/>
 
     <div class="tabs">
@@ -183,7 +202,7 @@ HTML = """
 </div>
 
 {% if results %}
-<div class="wrap card results">
+<div class="wrap card results" id="riepilogo-compravendita">
   <h2>Riepilogo</h2>
   <div class="grid3">
     <div class="pill"><b>Tipo proprietà:</b> {{ results.tipo_label }}</div>
@@ -206,16 +225,40 @@ HTML = """
 </div>
 {% endif %}
 
+<!-- ========================== AFFITTI (scaffolding) ========================== -->
+<div class="wrap card parent-section" id="parent-affitti" style="display:none">
+  <h2 style="margin-top:0">Affitti</h2>
+  <p class="muted">Sezione in preparazione. Qui inseriremo canone, spese ricorrenti, tassazione cedolare, vacancy, ROI annuo, cashflow, ecc.</p>
+  <p class="muted">Vuoi che inizi a copiare la struttura delle tab e ad adattarla all’analisi affitti?</p>
+</div>
+
 <script>
+/* ------- Parent tabs logic ------- */
+function openParent(which){
+  document.querySelectorAll(".parent-section").forEach(el=>el.style.display="none");
+  document.querySelectorAll(".parent-btn").forEach(el=>el.classList.remove("active"));
+  document.getElementById("parent-"+which).style.display="block";
+  const btn=document.querySelector('.parent-btn[data-parent="'+which+'"]');
+  if(btn) btn.classList.add("active");
+  const hidden=document.getElementById("parent_tab");
+  if(hidden) hidden.value=which;
+}
+
+/* ------- Child tabs logic (Compravendita) ------- */
 function openTab(evt, tabName) {
-  document.querySelectorAll(".tabcontent").forEach(el => el.style.display="none");
-  document.querySelectorAll(".tablink").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll("#parent-compravendita .tabcontent").forEach(el => el.style.display="none");
+  document.querySelectorAll("#parent-compravendita .tablink").forEach(el => el.classList.remove("active"));
   document.getElementById(tabName).style.display="block";
   if (evt && evt.currentTarget) evt.currentTarget.classList.add("active");
-  document.getElementById("active_tab").value = tabName;
+  const hidden=document.getElementById("active_tab");
+  if (hidden) hidden.value = tabName;
 }
+
+/* ------- Helpers ------- */
 function num(v){ if(!v) return 0; v=(""+v).replace(",","."); return parseFloat(v)||0; }
 function fmt(n){ return Math.round(n).toLocaleString('it-IT'); }
+
+/* Catastale preview */
 function autoFillByTipo(){
   const tipo=document.getElementById('tipo').value;
   if(tipo==='prima'){document.getElementById('coeff').value="115.5";document.getElementById('imposta_pct').value="2";}
@@ -230,6 +273,8 @@ function updatePreviewCat(){
   document.getElementById('pv_val_cat').innerHTML=fmt(val);
   document.getElementById('pv_imp_reg').innerHTML=fmt(imp);
 }
+
+/* Vendita preview */
 function updatePreviewVendita(){
   const spEl=document.getElementById("street_price");
   const sp = spEl ? num(spEl.value) : 0;
@@ -248,6 +293,8 @@ function updatePreviewVendita(){
   document.getElementById("pv_vimp").innerHTML=fmt(vimp);
   document.getElementById("pv_tot_vendita").innerHTML=fmt(totale);
 }
+
+/* Nuovo Valore preview */
 function updatePreviewVal(){
   const sp=num(document.getElementById('street_price').value);
   const incHS=num(document.getElementById('inc_hs_pct').value);
@@ -255,10 +302,18 @@ function updatePreviewVal(){
   const valFinale = sp * (1 + incHS/100 + incR/100);
   document.getElementById('pv_val_finale').innerHTML=fmt(valFinale);
 }
+
+/* Init on load */
 document.addEventListener('DOMContentLoaded',()=>{
+  // Parent default
+  const parentDefault = "{{ parent_tab or 'compravendita' }}";
+  openParent(parentDefault);
+
+  // Child default for Compravendita
   const initial="{{ active_tab or 'acquisto' }}";
-  const btn=document.querySelector('.tablink[data-tab="'+initial+'"]');
+  const btn=document.querySelector('#parent-compravendita .tablink[data-tab="'+initial+'"]');
   if(btn) btn.click(); else openTab(null,'acquisto');
+
   updatePreviewCat();
   updatePreviewVendita();
   updatePreviewVal();
@@ -268,7 +323,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 </html>
 """
 
-# -------------------- calcoli backend --------------------
+# -------------------- calcoli backend (Compravendita) --------------------
 def compute_results(form):
     # Acquisto
     ask = parse_num(form.get("ask"))
@@ -343,7 +398,7 @@ def compute_results(form):
 # -------------------- routes --------------------
 @app.route("/", methods=["GET","POST"])
 def index():
-    # default form values
+    # default form values (Compravendita)
     formvals = {
         # Acquisto
         "ask":"150000","ipotecaria":"50","catastale":"50","agenzia":"3000","architetto":"2000",
@@ -357,16 +412,17 @@ def index():
         "street_price":"220000","inc_hs_pct":"5","inc_ristr_pct":"10"
     }
     active_tab = "acquisto"
+    parent_tab = request.form.get("parent_tab","compravendita") if request.method=="POST" else "compravendita"
     results = None
 
-    if request.method == "POST":
+    if request.method == "POST" and parent_tab == "compravendita":
         active_tab = request.form.get("active_tab", "acquisto")
         for k in formvals.keys():
             if k in request.form and request.form.get(k) != "":
                 formvals[k] = request.form.get(k)
         results, formvals = compute_results(request.form)
 
-    return render_template_string(HTML, results=results, active_tab=active_tab, formvals=formvals)
+    return render_template_string(HTML, results=results, active_tab=active_tab, parent_tab=parent_tab, formvals=formvals)
 
 @app.route("/download", methods=["POST"])
 def download_excel():
