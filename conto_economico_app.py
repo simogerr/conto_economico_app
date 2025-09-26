@@ -63,10 +63,11 @@ HTML = """
 <body>
 <header>
   <h1>Deal Checker Immobiliare</h1>
-  <p>Acquisto + Valore Catastale & Imposta di Registro (con anteprima live)</p>
+  <p>Acquisto + Valore Catastale & Imposta di Registro (anteprima live, export Excel)</p>
 </header>
 
 <div class="wrap card">
+  <!-- FORM PRINCIPALE -->
   <form method="post" id="mainForm">
     <!-- persistenza tab attiva -->
     <input type="hidden" id="active_tab" name="active_tab" value="{{ active_tab or 'acquisto' }}"/>
@@ -88,6 +89,10 @@ HTML = """
       <div class="row"><label>Nuove utenze (luce+gas) (€)</label><input type="text" name="utenze" value="{{ formvals.utenze }}"></div>
       <div class="row"><label>Imprevisti (€)</label><input type="text" name="imprevisti" value="{{ formvals.imprevisti }}"></div>
       <div class="row"><label>Costi ristrutturazione (€)</label><input type="text" name="ristrutturazione" value="{{ formvals.ristrutturazione }}"></div>
+
+      <div class="actions">
+        <button class="btn primary" type="submit">Calcola</button>
+      </div>
     </div>
 
     <!-- TAB: VALORE CATASTALE & REGISTRO -->
@@ -116,19 +121,10 @@ HTML = """
         <div class="item"><span>Valore catastale</span><span id="pv_val_cat">—</span></div>
         <div class="item"><span>Imposta di registro</span><span id="pv_imp_reg">—</span></div>
       </div>
-    </div>
 
-    <div class="actions">
-      <button class="btn primary" type="submit">Calcola</button>
-      {% if results %}
-      <!-- Form separato per download: rimanda tutti i valori -->
-      <form method="post" action="/download" style="margin:0">
-        {% for k,v in formvals.items() %}
-          <input type="hidden" name="{{k}}" value="{{v}}">
-        {% endfor %}
-        <button class="btn secondary" type="submit">Scarica Excel</button>
-      </form>
-      {% endif %}
+      <div class="actions">
+        <button class="btn primary" type="submit">Calcola</button>
+      </div>
     </div>
   </form>
 </div>
@@ -142,6 +138,14 @@ HTML = """
     <div class="pill"><b>Imposta di registro:</b> € {{ results.imposta_registro }}</div>
     <div class="pill"><b>Totale costi acquisto:</b> € {{ results.totale }}</div>
   </div>
+
+  <!-- FORM SEPARATO PER IL DOWNLOAD (fuori dal form principale) -->
+  <form method="post" action="/download" style="margin-top:12px">
+    {% for k,v in formvals.items() %}
+      <input type="hidden" name="{{k}}" value="{{v}}">
+    {% endfor %}
+    <button class="btn secondary" type="submit">Scarica Excel</button>
+  </form>
 </div>
 {% endif %}
 
@@ -198,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 def compute_results(form):
-    # leggi tutti i campi necessari (numerici)
+    # leggi numerici
     ask = parse_num(form.get("ask"))
     ipotecaria = parse_num(form.get("ipotecaria"))
     catastale_cost = parse_num(form.get("catastale"))
@@ -264,7 +268,6 @@ def index():
 
 @app.route("/download", methods=["POST"])
 def download_excel():
-    # ricalcola da POST e crea Excel in memoria
     results, inputs = compute_results(request.form)
 
     df_inputs = pd.DataFrame([
@@ -295,9 +298,9 @@ def download_excel():
         df_inputs.to_excel(writer, index=False, sheet_name="Input")
         df_results.to_excel(writer, index=False, sheet_name="Risultati")
     output.seek(0)
-    return send_file(output, as_attachment=True, download_name="deal_checker.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(output, as_attachment=True, download_name="deal_checker.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# Per esecuzione locale
+# Locale: python conto_economnico_app.py
 if __name__ == "__main__":
-    # In produzione su Render, parte con gunicorn (vedi Procfile)
     app.run(host="0.0.0.0", port=5000, debug=False)
