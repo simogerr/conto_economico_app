@@ -78,7 +78,6 @@ HTML = """
       <div class="row"><label>Acquisto immobile</label><input type="text" name="ask" value="{{ formvals.ask }}"></div>
       <div class="row"><label>Imposta ipotecaria</label><input type="text" name="ipotecaria" value="{{ formvals.ipotecaria }}"></div>
       <div class="row"><label>Imposta catastale</label><input type="text" name="catastale" value="{{ formvals.catastale }}"></div>
-      <!-- Imposta di registro viene calcolata e riportata -->
       <div class="row"><label>Imposta di registro</label><input type="text" value="{{ formvals.imposta_registro }}" readonly></div>
       <div class="row"><label>Provvigioni agenzia</label><input type="text" name="agenzia" value="{{ formvals.agenzia }}"></div>
       <div class="row"><label>Studio architetto</label><input type="text" name="architetto" value="{{ formvals.architetto }}"></div>
@@ -86,7 +85,17 @@ HTML = """
       <div class="row"><label>Spese condominiali insolute</label><input type="text" name="condominio" value="{{ formvals.condominio }}"></div>
       <div class="row"><label>Nuove utenze (luce+gas)</label><input type="text" name="utenze" value="{{ formvals.utenze }}"></div>
       <div class="row"><label>Imprevisti</label><input type="text" name="imprevisti" value="{{ formvals.imprevisti }}"></div>
-      <div class="row"><label>Costi ristrutturazione</label><input type="text" name="ristrutturazione" value="{{ formvals.ristrutturazione }}"></div>
+      <!-- Nuova tendina ristrutturazione -->
+      <div class="row">
+        <label>Tipo di ristrutturazione</label>
+        <select name="ristrut_tipo">
+          <option value="nessuna" {% if formvals.ristrut_tipo=='nessuna' %}selected{% endif %}>Nessuna</option>
+          <option value="piccola" {% if formvals.ristrut_tipo=='piccola' %}selected{% endif %}>Piccoli interventi (10%)</option>
+          <option value="intermedia" {% if formvals.ristrut_tipo=='intermedia' %}selected{% endif %}>Ristrutturazione intermedia (20%)</option>
+          <option value="complessa" {% if formvals.ristrut_tipo=='complessa' %}selected{% endif %}>Ristrutturazione complessa (60%)</option>
+        </select>
+      </div>
+      <div class="row"><label>Costo ristrutturazione (calcolato)</label><input type="text" value="{{ formvals.ristrutturazione }}" readonly></div>
 
       <div class="actions"><button class="btn primary" type="submit">Calcola</button></div>
     </div>
@@ -103,7 +112,6 @@ HTML = """
       <div class="row"><label>Rendita catastale</label><input type="text" id="rendita" name="rendita" value="{{ formvals.rendita }}" oninput="updatePreview()"></div>
       <div class="row"><label>Coefficiente</label><input type="text" id="coeff" name="coeff" value="{{ formvals.coeff }}" oninput="updatePreview()"></div>
       <div class="row"><label>Imposta di registro %</label><input type="text" id="imposta_pct" name="imposta_pct" value="{{ formvals.imposta_pct }}" oninput="updatePreview()"></div>
-      <p class="muted">Valore catastale = Rendita × Coefficiente | Imposta registro = Valore catastale × %</p>
       <div class="preview">
         <h4>Anteprima calcoli</h4>
         <div class="item"><span>Valore catastale</span><span id="pv_val_cat">—</span></div>
@@ -121,6 +129,7 @@ HTML = """
     <div class="pill"><b>Tipo proprietà:</b> {{ results.tipo_label }}</div>
     <div class="pill"><b>Valore catastale:</b> {{ results.valore_catastale }}</div>
     <div class="pill"><b>Imposta di registro:</b> {{ results.imposta_registro }}</div>
+    <div class="pill"><b>Costo ristrutturazione:</b> {{ results.ristrutturazione }}</div>
     <div class="pill"><b>Totale costi acquisto:</b> {{ results.totale }}</div>
   </div>
   <form method="post" action="/download" style="margin-top:12px">
@@ -165,7 +174,6 @@ def compute_results(form):
     condominio = parse_num(form.get("condominio"))
     utenze = parse_num(form.get("utenze"))
     imprevisti = parse_num(form.get("imprevisti"))
-    ristrutturazione = parse_num(form.get("ristrutturazione"))
 
     tipo = form.get("tipo","prima")
     rendita = parse_num(form.get("rendita"))
@@ -175,6 +183,11 @@ def compute_results(form):
     valore_catastale = rendita * coeff
     imposta_registro = valore_catastale * (imposta_pct / 100.0)
 
+    # Calcolo ristrutturazione
+    ristrut_tipo = form.get("ristrut_tipo","nessuna")
+    perc = {"nessuna":0,"piccola":0.10,"intermedia":0.20,"complessa":0.60}[ristrut_tipo]
+    ristrutturazione = ask * perc
+
     totale = (ask + ipotecaria + catastale_cost + agenzia + architetto +
               condono + condominio + utenze + imprevisti + ristrutturazione +
               imposta_registro)
@@ -183,18 +196,21 @@ def compute_results(form):
         "tipo_label": "Prima casa" if tipo=="prima" else "Seconda casa",
         "valore_catastale": f"{round(valore_catastale):,}".replace(",", "."),
         "imposta_registro": f"{round(imposta_registro):,}".replace(",", "."),
+        "ristrutturazione": f"{round(ristrutturazione):,}".replace(",", "."),
         "totale": f"{round(totale):,}".replace(",", "."),
     }
 
     inputs = form.to_dict()
-    inputs["imposta_registro"] = round(imposta_registro,2)  # riportata nella tab acquisto
+    inputs["imposta_registro"] = round(imposta_registro,2)
+    inputs["ristrutturazione"] = round(ristrutturazione,2)
     return results, inputs
 
 @app.route("/", methods=["GET","POST"])
 def index():
     formvals = {"ask":"150000","ipotecaria":"50","catastale":"50","agenzia":"3000","architetto":"2000",
-                "condono":"0","condominio":"0","utenze":"500","imprevisti":"2000","ristrutturazione":"30000",
-                "tipo":"prima","rendita":"500","coeff":"115.5","imposta_pct":"2","imposta_registro":"0"}
+                "condono":"0","condominio":"0","utenze":"500","imprevisti":"2000",
+                "tipo":"prima","rendita":"500","coeff":"115.5","imposta_pct":"2","imposta_registro":"0",
+                "ristrut_tipo":"nessuna","ristrutturazione":"0"}
     active_tab = "acquisto"; results=None
 
     if request.method=="POST":
