@@ -28,7 +28,7 @@ def amortize_first_year(principal, annual_rate_pct, years):
     """Restituisce (rata_mensile, esborso_annuo, interesse_anno1, capitale_anno1, residuo_fine_anno1)."""
     P = float(principal)
     i = float(annual_rate_pct) / 100.0
-    n_years = int(years)
+    n_years = int(years) if years else 0
     if P <= 0 or i < 0 or n_years <= 0:
         return (0.0, 0.0, 0.0, 0.0, P)
 
@@ -42,7 +42,7 @@ def amortize_first_year(principal, annual_rate_pct, years):
     saldo = P
     interesse_anno = 0.0
     capitale_anno = 0.0
-    for m in range(1, 13):
+    for _ in range(12):
         interesse = saldo * r
         quota_cap = rata - interesse
         interesse_anno += interesse
@@ -118,6 +118,11 @@ HTML = """
   .preview .item span:first-child{color:#a7b2c3}
 
   .muted{color:#94a3b8;font-size:13px}
+
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{border:1px solid #1f2937;padding:8px;text-align:right}
+  th{text-align:center;background:#0b1222}
+  td:first-child, th:first-child{text-align:left}
 </style>
 </head>
 <body>
@@ -141,7 +146,7 @@ HTML = """
 <div class="wrap card parent-section" id="parent-compravendita">
   <form method="post" id="form_compravendita">
     <input type="hidden" name="parent_tab" value="compravendita"/>
-    <input type="hidden" id="active_tab_cv" name="active_tab" value="{{ active_tab_cv or 'acquisto' }}"/>
+    <input type="hidden" id="active_tab_cv" name="active_tab" value="{{ active_tab_cv or 'cv_acq' }}"/>
 
     <div class="tabs">
       <button type="button" class="tablink" data-tab="cv_acq" onclick="openChild('compravendita','cv_acq')">Acquisto</button>
@@ -338,7 +343,7 @@ HTML = """
       </div>
 
       <div class="preview">
-        <h4>Anteprima</h4>
+        <h4>Indicatori</h4>
         <div class="item"><span>Ricavi lordi annui</span><span>{{ af_preview.ricavi_lordi }}</span></div>
         <div class="item"><span>Spese annue</span><span>{{ af_preview.spese_annue }}</span></div>
         <div class="item"><span>NOI (ricavi - spese)</span><span>{{ af_preview.noi }}</span></div>
@@ -349,7 +354,38 @@ HTML = """
         <div class="item"><span>Cashflow (NOI - rata)</span><span>{{ af_preview.cashflow }}</span></div>
         <div class="item"><span>Equity (inv. - capitale mutuato)</span><span>{{ af_preview.equity }}</span></div>
         <div class="item"><span>ROE (cashflow / equity)</span><span>{{ af_preview.roe }}</span></div>
+        <hr style="border:none;border-top:1px solid #1f2937;margin:6px 0"/>
+        <div class="item"><span>Payback mesi (senza debito, su NOI)</span><span>{{ af_preview.payback_mesi_no_debito }}</span></div>
+        <div class="item"><span>Payback mesi (con debito, su Cashflow)</span><span>{{ af_preview.payback_mesi_con_debito }}</span></div>
       </div>
+
+      {% if proiezione_5y and proiezione_5y|length > 0 %}
+      <div class="preview">
+        <h4>Proiezione 5 anni (cumulata)</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Anno</th>
+              <th>NOI</th>
+              <th>Cashflow</th>
+              <th>ROI cumulato</th>
+              <th>ROE cumulato</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in proiezione_5y %}
+            <tr>
+              <td>{{ row['Anno'] }}</td>
+              <td>{{ row['NOI'] }}</td>
+              <td>{{ row['Cashflow'] }}</td>
+              <td>{{ row['ROI_cum'] }}</td>
+              <td>{{ row['ROE_cum'] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
 
       <div class="actions">
         <button class="btn primary" type="submit">Calcola</button>
@@ -372,6 +408,8 @@ HTML = """
     <div class="pill"><b>Cashflow:</b> {{ results_af.cashflow }}</div>
     <div class="pill"><b>Equity:</b> {{ results_af.equity }}</div>
     <div class="pill"><b>ROE:</b> {{ results_af.roe }}</div>
+    <div class="pill"><b>Payback (NOI):</b> {{ results_af.payback_no_debito }}</div>
+    <div class="pill"><b>Payback (Cashflow):</b> {{ results_af.payback_con_debito }}</div>
   </div>
 
   <form method="post" action="/download_af" style="margin-top:12px">
@@ -458,20 +496,20 @@ function updatePreviewCat(prefix){
 function updatePreviewVendita(prefix){
   const spEl=document.getElementById(prefix+"_street_price");
   const sp = spEl ? num(spEl.value) : 0;
-  const hsPercent=num(document.getElementById(prefix+"_provv_sale_pct") ? document.querySelector("[name='"+prefix+"_hs_percent']").value : (document.querySelector("[name='"+prefix+"_hs_percent']")?document.querySelector("[name='"+prefix+"_hs_percent']").value:0));
-  const ape=num(document.getElementById(prefix+"_ape")?document.getElementById(prefix+"_ape").value:0);
-  const dico=num(document.getElementById(prefix+"_dico")?document.getElementById(prefix+"_dico").value:0);
-  const provvPct=num(document.getElementById(prefix+"_provv_sale_pct")?document.getElementById(prefix+"_provv_sale_pct").value:0);
-  const vimp=num(document.getElementById(prefix+"_vendita_imprevisti")?document.getElementById(prefix+"_vendita_imprevisti").value:0);
+  const hsPercent=num(document.querySelector("[name='"+prefix+"_hs_percent']").value);
+  const ape=num(document.getElementById(prefix+"_ape").value);
+  const dico=num(document.getElementById(prefix+"_dico").value);
+  const provvPct=num(document.getElementById(prefix+"_provv_sale_pct").value);
+  const vimp=num(document.getElementById(prefix+"_vendita_imprevisti").value);
   const hsCost=sp*(hsPercent/100);
   const provv=sp*(provvPct/100);
   const totale=hsCost+ape+dico+provv+vimp;
-  if(document.getElementById(prefix+"_pv_hs_cost")) document.getElementById(prefix+"_pv_hs_cost").innerHTML=fmt(hsCost);
-  if(document.getElementById(prefix+"_pv_ape")) document.getElementById(prefix+"_pv_ape").innerHTML=fmt(ape);
-  if(document.getElementById(prefix+"_pv_dico")) document.getElementById(prefix+"_pv_dico").innerHTML=fmt(dico);
-  if(document.getElementById(prefix+"_pv_provv")) document.getElementById(prefix+"_pv_provv").innerHTML=fmt(provv);
-  if(document.getElementById(prefix+"_pv_vimp")) document.getElementById(prefix+"_pv_vimp").innerHTML=fmt(vimp);
-  if(document.getElementById(prefix+"_pv_tot_vendita")) document.getElementById(prefix+"_pv_tot_vendita").innerHTML=fmt(totale);
+  document.getElementById(prefix+"_pv_hs_cost").innerHTML=fmt(hsCost);
+  document.getElementById(prefix+"_pv_ape").innerHTML=fmt(ape);
+  document.getElementById(prefix+"_pv_dico").innerHTML=fmt(dico);
+  document.getElementById(prefix+"_pv_provv").innerHTML=fmt(provv);
+  document.getElementById(prefix+"_pv_vimp").innerHTML=fmt(vimp);
+  document.getElementById(prefix+"_pv_tot_vendita").innerHTML=fmt(totale);
 }
 function updatePreviewVal(prefix){
   const sp=num(document.getElementById(prefix+'_street_price').value);
@@ -550,11 +588,12 @@ def compute_cv(form):
 
     # ROI
     roi = 0.0
-    roi_class = ""
+    roi_class = "roi-good" if (totale_acquisto > 0 and (valore_finale - totale_acquisto)/totale_acquisto*100 > 30) else ""
+
     if totale_acquisto > 0:
-        roi = (valore_finale - totale_acquisto) / totale_acquisto * 100.0
-    if roi > 30.0:
-        roi_class = "roi-good"
+        roi_val = (valore_finale - totale_acquisto) / totale_acquisto * 100.0
+    else:
+        roi_val = 0.0
 
     results = {
         "titolo": titolo if titolo else None,
@@ -565,8 +604,8 @@ def compute_cv(form):
         "totale_acquisto": f"{round(totale_acquisto):,}".replace(",", "."),
         "costi_vendita": f"{round(costi_vendita):,}".replace(",", "."),
         "valore_finale": f"{round(valore_finale):,}".replace(",", "."),
-        "roi": f"{roi:.1f}%",
-        "roi_class": "roi-good" if roi > 30 else "",
+        "roi": f"{roi_val:.1f}%",
+        "roi_class": roi_class,
     }
 
     # formvals (per Excel)
@@ -628,12 +667,50 @@ def compute_affitti(form, mutuo_ctx):
 
     # Mutuo (opzionale)
     includi_mutuo = (form.get("af_includi_mutuo") or "no").lower() == "si"
-    mutuo_annuo = parse_num(mutuo_ctx.get("esborso_annuo", "0").replace(".", "").replace(",", "."))
-    capitale_mutuato = parse_num(mutuo_ctx.get("capitale", "0").replace(".", ""))
+    # mutuo_ctx valori sono stringhe formattate -> puliamo
+    mutuo_annuo = 0.0
+    capitale_mutuato = 0.0
+    try:
+        mutuo_annuo = float(mutuo_ctx.get("esborso_annuo","0").replace(".","").replace(",","."))
+    except:
+        mutuo_annuo = 0.0
+    try:
+        capitale_mutuato = float(mutuo_ctx.get("capitale","0").replace(".","").replace(",","."))
+    except:
+        capitale_mutuato = 0.0
 
     cashflow = noi - (mutuo_annuo if includi_mutuo else 0.0)
     equity = max(invest_tot - (capitale_mutuato if includi_mutuo else 0.0), 0.0)
     roe = (cashflow / equity * 100.0) if equity > 0 else 0.0
+
+    # Payback (mesi)
+    noi_mensile = noi / 12.0
+    cashflow_mensile = cashflow / 12.0
+    payback_no_debito = "N/D"
+    payback_con_debito = "N/D"
+    if invest_tot > 0 and noi_mensile > 0:
+        mesi = math.ceil(invest_tot / noi_mensile)
+        payback_no_debito = f"{mesi} mesi (~{mesi/12:.1f} anni)"
+    if equity > 0 and cashflow_mensile > 0 and includi_mutuo:
+        mesi = math.ceil(equity / cashflow_mensile)
+        payback_con_debito = f"{mesi} mesi (~{mesi/12:.1f} anni)"
+
+    # Proiezione 5 anni (costanti, senza crescita)
+    proiezione = []
+    cum_noi = 0.0
+    cum_cf = 0.0
+    for year in range(1, 6):
+        cum_noi += noi
+        cum_cf += cashflow
+        roi_cum = (cum_noi / invest_tot * 100.0) if invest_tot > 0 else 0.0
+        roe_cum = (cum_cf / equity * 100.0) if equity > 0 else 0.0
+        proiezione.append({
+            "Anno": year,
+            "NOI": f"{round(noi):,}".replace(",", "."),
+            "Cashflow": f"{round(cashflow):,}".replace(",", "."),
+            "ROI_cum": f"{roi_cum:.1f}%",
+            "ROE_cum": f"{roe_cum:.1f}%",
+        })
 
     results = {
         "titolo": titolo if titolo else None,
@@ -645,10 +722,12 @@ def compute_affitti(form, mutuo_ctx):
         "mutuo_annuo": f"{round(mutuo_annuo):,}".replace(",", ".") if includi_mutuo else "0",
         "cashflow": f"{round(cashflow):,}".replace(",", "."),
         "equity": f"{round(equity):,}".replace(",", "."),
-        "roe": f"{roe:.1f}%"
+        "roe": f"{roe:.1f}%",
+        "payback_no_debito": payback_no_debito,
+        "payback_con_debito": payback_con_debito,
     }
 
-    # Anteprima numerica grezza (per pannello preview)
+    # Anteprima per pannello
     preview = {
         "ricavi_lordi": results["ricavi_lordi"],
         "spese_annue": results["spese_annue"],
@@ -659,11 +738,13 @@ def compute_affitti(form, mutuo_ctx):
         "cashflow": results["cashflow"],
         "equity": results["equity"],
         "roe": results["roe"],
+        "payback_mesi_no_debito": results["payback_no_debito"],
+        "payback_mesi_con_debito": results["payback_con_debito"],
     }
 
     # stato per Excel
     af = {k: (form.get(k) or "") for k in form.keys() if k.startswith("af_")}
-    return results, af, preview
+    return results, af, preview, proiezione
 
 # -------------------- routes --------------------
 @app.route("/", methods=["GET","POST"])
@@ -695,63 +776,52 @@ def index():
     results_cv = None
     results_af = None
     af_preview = {"ricavi_lordi":"—","spese_annue":"—","noi":"—","invest_tot":"—","roi":"—",
-                  "mutuo_annuo":"—","cashflow":"—","equity":"—","roe":"—"}
+                  "mutuo_annuo":"—","cashflow":"—","equity":"—","roe":"—",
+                  "payback_mesi_no_debito":"—","payback_mesi_con_debito":"—"}
+    proiezione_5y = []
 
     # override da POST
     if request.method == "POST":
-        # raccogli cv
+        # popolamento cv da form
         for k in list(cv.keys()):
-            form_key = "cv_"+k if not k.startswith("cv_") and k not in ["titolo"] else k
-        for k in request.form.keys():
-            if k.startswith("cv_") and k[3:] in cv or k in ["cv_titolo"]:
-                key = k[3:] if k.startswith("cv_") else k.split("_",1)[1]
-                cv[key] = request.form.get(k)
+            form_key = "cv_"+k
+            if form_key in request.form:
+                cv[k] = request.form.get(form_key)
 
-        # raccogli affitti
-        for k in request.form.keys():
-            if k.startswith("af_"):
-                af[k[3:]] = request.form.get(k)
+        # popolamento affitti
+        for k in list(af.keys()):
+            form_key = "af_"+k
+            if form_key in request.form:
+                af[k] = request.form.get(form_key)
 
-        # raccogli mutuo
-        for k in ["m_capitale","m_tasso","m_anni"]:
-            if k in request.form:
-                if k=="m_capitale": mutuo["capitale"] = request.form.get(k)
-                if k=="m_tasso": mutuo["tasso"] = request.form.get(k)
-                if k=="m_anni": mutuo["anni"] = request.form.get(k)
+        # popolamento mutuo
+        for k_form,k_state in [("m_capitale","capitale"),("m_tasso","tasso"),("m_anni","anni")]:
+            if k_form in request.form:
+                mutuo[k_state] = request.form.get(k_form)
 
-        # quale parent?
+        # smista
         if parent_tab == "compravendita":
             active_tab_cv = request.form.get("active_tab", "cv_acq")
-            # rimappa in form-names "cv_*"
-            f = {}
-            for k,v in cv.items():
-                f["cv_"+k] = v
+            # prepara dizionario prefissato per funzione
+            f = { "cv_"+k: v for k,v in cv.items() }
             results_cv, cv_state = compute_cv(f)
-            # aggiorna i read-only
             cv["imposta_registro"] = cv_state["cv_imposta_registro"]
             cv["ristrutturazione"] = cv_state["cv_ristrutturazione"]
 
         elif parent_tab == "affitti":
             active_tab_af = request.form.get("active_tab", "af_acq")
-            # calcola mutuo prima per preview (se già impostato)
             mutuo_ctx = compute_mutuo({
                 "m_capitale": mutuo["capitale"],
                 "m_tasso": mutuo["tasso"],
                 "m_anni": mutuo["anni"],
             })
-            # compute affitti
-            f = {}
-            for k,v in af.items():
-                f["af_"+k] = v
-            results_af, af_state, af_preview = compute_affitti(f, mutuo_ctx)
-            # aggiorna mutuo previews per pagina
+            f = { "af_"+k: v for k,v in af.items() }
+            results_af, af_state, af_preview, proiezione_5y = compute_affitti(f, mutuo_ctx)
             mutuo.update(mutuo_ctx)
 
         elif parent_tab == "mutuo":
-            # calcola mutuo
             mutuo = compute_mutuo(request.form)
 
-    # preview mutuo se non postato
     mutuo_preview = {
         "rata_mensile": mutuo.get("rata_mensile","0"),
         "esborso_annuo": mutuo.get("esborso_annuo","0"),
@@ -760,26 +830,20 @@ def index():
         "residuo_fine_anno1": mutuo.get("residuo_fine_anno1","0"),
     }
 
-    # costruisci dizionari con prefissi per template
-    cv_pref = {k: cv[k] for k in cv}
-    af_pref = {k: af[k] for k in af}
-    mutuo_pref = {k: mutuo[k] for k in mutuo}
-
     return render_template_string(
         HTML,
         parent_tab=parent_tab,
         active_tab_cv=active_tab_cv,
         active_tab_af=active_tab_af,
-        # contexts
-        cv=cv_pref, af=af_pref, mutuo=mutuo_pref,
+        cv=cv, af=af, mutuo=mutuo,
         results_cv=results_cv, results_af=results_af,
-        af_preview=af_preview, mutuo_preview=mutuo_preview
+        af_preview=af_preview, proiezione_5y=proiezione_5y,
+        mutuo_preview=mutuo_preview
     )
 
 # -------------------- download --------------------
 @app.route("/download_cv", methods=["POST"])
 def download_cv():
-    # ricomputa risultati cv
     results, cv_state = compute_cv(request.form)
     titolo = results.get("titolo") or "Operazione Compravendita"
     file_slug = slugify(titolo)
@@ -815,13 +879,12 @@ def download_cv():
 
 @app.route("/download_af", methods=["POST"])
 def download_af():
-    # ricomputa risultati affitti
-    # ricostruisci mutuo ctx da POST (se incluso nel form)
+    # ricostruisci un contesto mutuo minimale per equity/cashflow nel ricalcolo
     mutuo_ctx = {
         "capitale": request.form.get("capitale","0"),
         "esborso_annuo": request.form.get("esborso_annuo","0"),
     }
-    results, af_state, _ = compute_affitti(request.form, mutuo_ctx)
+    results, af_state, preview, proiezione = compute_affitti(request.form, mutuo_ctx)
     titolo = results.get("titolo") or "Operazione Affitti"
     file_slug = slugify(titolo)
 
@@ -838,13 +901,22 @@ def download_af():
         ["Cashflow", results["cashflow"]],
         ["Equity", results["equity"]],
         ["ROE", results["roe"]],
+        ["Payback NOI (mesi)", results["payback_no_debito"]],
+        ["Payback Cashflow (mesi)", results["payback_con_debito"]],
     ], columns=["Risultato","Valore"])
+
+    # Proiezione 5 anni in un foglio dedicato
+    df_proj = pd.DataFrame(proiezione)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df_inputs.to_excel(writer, index=False, sheet_name="Input_Affitti")
         df_mutuo.to_excel(writer, index=False, sheet_name="Mutuo")
         df_results.to_excel(writer, index=False, sheet_name="Risultati")
+        if not df_proj.empty:
+            df_proj.to_excel(writer, index=False, sheet_name="Proiezione_5_anni")
+
+        # auto-fit
         for _, ws in writer.sheets.items():
             for col_idx, col_cells in enumerate(ws.columns, start=1):
                 max_len = 0
