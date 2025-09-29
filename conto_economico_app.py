@@ -346,16 +346,16 @@ HTML = """
         <h4>Indicatori</h4>
         <div class="item"><span>Ricavi lordi annui</span><span>{{ af_preview.ricavi_lordi }}</span></div>
         <div class="item"><span>Spese annue</span><span>{{ af_preview.spese_annue }}</span></div>
-        <div class="item"><span>Reddito operativo (Ricavi - Spese)</span><span>{{ af_preview.noi }}</span></div>
+        <div class="item"><span>NOI (ricavi - spese)</span><span>{{ af_preview.noi }}</span></div>
         <div class="item"><span>Investimento totale</span><span>{{ af_preview.invest_tot }}</span></div>
         <div class="item"><span>ROI (senza debito)</span><span>{{ af_preview.roi }}</span></div>
         <hr style="border:none;border-top:1px solid #1f2937;margin:6px 0"/>
         <div class="item"><span>Mutuo - rata annua</span><span>{{ af_preview.mutuo_annuo }}</span></div>
-        <div class="item"><span>Cashflow (Reddito operativo - rata)</span><span>{{ af_preview.cashflow }}</span></div>
+        <div class="item"><span>Cashflow (NOI - rata)</span><span>{{ af_preview.cashflow }}</span></div>
         <div class="item"><span>Equity (inv. - capitale mutuato)</span><span>{{ af_preview.equity }}</span></div>
         <div class="item"><span>ROE (cashflow / equity)</span><span>{{ af_preview.roe }}</span></div>
         <hr style="border:none;border-top:1px solid #1f2937;margin:6px 0"/>
-        <div class="item"><span>Payback mesi (senza debito, su Reddito operativo)</span><span>{{ af_preview.payback_mesi_no_debito }}</span></div>
+        <div class="item"><span>Payback mesi (senza debito, su NOI)</span><span>{{ af_preview.payback_mesi_no_debito }}</span></div>
         <div class="item"><span>Payback mesi (con debito, su Cashflow)</span><span>{{ af_preview.payback_mesi_con_debito }}</span></div>
       </div>
 
@@ -366,7 +366,7 @@ HTML = """
           <thead>
             <tr>
               <th>Anno</th>
-              <th>Reddito operativo</th>
+              <th>NOI</th>
               <th>Cashflow</th>
               <th>ROI cumulato</th>
               <th>ROE cumulato</th>
@@ -376,7 +376,7 @@ HTML = """
             {% for row in proiezione_5y %}
             <tr>
               <td>{{ row['Anno'] }}</td>
-              <td>{{ row['Reddito operativo'] }}</td>
+              <td>{{ row['NOI'] }}</td>
               <td>{{ row['Cashflow'] }}</td>
               <td>{{ row['ROI_cum'] }}</td>
               <td>{{ row['ROE_cum'] }}</td>
@@ -401,14 +401,14 @@ HTML = """
   <div class="grid3">
     <div class="pill"><b>Ricavi lordi annui:</b> {{ results_af.ricavi_lordi }}</div>
     <div class="pill"><b>Spese annue:</b> {{ results_af.spese_annue }}</div>
-    <div class="pill"><b>Reddito operativo:</b> {{ results_af.noi }}</div>
+    <div class="pill"><b>NOI:</b> {{ results_af.noi }}</div>
     <div class="pill"><b>Investimento totale:</b> {{ results_af.invest_tot }}</div>
     <div class="pill"><b>ROI (senza debito):</b> {{ results_af.roi }}</div>
     <div class="pill"><b>Mutuo (rata annua):</b> {{ results_af.mutuo_annuo }}</div>
     <div class="pill"><b>Cashflow:</b> {{ results_af.cashflow }}</div>
     <div class="pill"><b>Equity:</b> {{ results_af.equity }}</div>
     <div class="pill"><b>ROE:</b> {{ results_af.roe }}</div>
-    <div class="pill"><b>Payback (Reddito operativo):</b> {{ results_af.payback_no_debito }}</div>
+    <div class="pill"><b>Payback (NOI):</b> {{ results_af.payback_no_debito }}</div>
     <div class="pill"><b>Payback (Cashflow):</b> {{ results_af.payback_con_debito }}</div>
   </div>
 
@@ -455,7 +455,7 @@ HTML = """
 function openParent(which){
   document.querySelectorAll(".parent-section").forEach(el=>el.style.display="none");
   document.querySelectorAll(".parent-btn").forEach(el=>el.classList.remove("active"));
-  document.getElementById("parent-"+which).style.display="block");
+  document.getElementById("parent-"+which).style.display="block";
   const btn=document.querySelector('.parent-btn[data-parent="'+which+'"]');
   if(btn) btn.classList.add("active");
 }
@@ -587,11 +587,13 @@ def compute_cv(form):
     valore_finale = street_price * (1 + inc_hs_pct/100.0 + inc_ristr_pct/100.0)
 
     # ROI
+    roi = 0.0
+    roi_class = "roi-good" if (totale_acquisto > 0 and (valore_finale - totale_acquisto)/totale_acquisto*100 > 30) else ""
+
     if totale_acquisto > 0:
         roi_val = (valore_finale - totale_acquisto) / totale_acquisto * 100.0
     else:
         roi_val = 0.0
-    roi_class = "roi-good" if roi_val > 30 else ""
 
     results = {
         "titolo": titolo if titolo else None,
@@ -704,7 +706,7 @@ def compute_affitti(form, mutuo_ctx):
         roe_cum = (cum_cf / equity * 100.0) if equity > 0 else 0.0
         proiezione.append({
             "Anno": year,
-            "Reddito operativo": f"{round(noi):,}".replace(",", "."),
+            "NOI": f"{round(noi):,}".replace(",", "."),
             "Cashflow": f"{round(cashflow):,}".replace(",", "."),
             "ROI_cum": f"{roi_cum:.1f}%",
             "ROE_cum": f"{roe_cum:.1f}%",
@@ -892,14 +894,14 @@ def download_af():
         ["Titolo operazione", titolo],
         ["Ricavi lordi annui", results["ricavi_lordi"]],
         ["Spese annue", results["spese_annue"]],
-        ["Reddito operativo", results["noi"]],
+        ["NOI", results["noi"]],
         ["Investimento totale", results["invest_tot"]],
         ["ROI (senza debito)", results["roi"]],
         ["Mutuo (rata annua)", results["mutuo_annuo"]],
         ["Cashflow", results["cashflow"]],
         ["Equity", results["equity"]],
         ["ROE", results["roe"]],
-        ["Payback Reddito operativo (mesi)", results["payback_no_debito"]],
+        ["Payback NOI (mesi)", results["payback_no_debito"]],
         ["Payback Cashflow (mesi)", results["payback_con_debito"]],
     ], columns=["Risultato","Valore"])
 
